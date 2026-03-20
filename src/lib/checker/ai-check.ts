@@ -20,6 +20,18 @@ function isResponsesEndpoint(input: string): boolean {
   return /\/responses\/?$/.test(normalizeInputUrl(input));
 }
 
+function normalizeRequestHeaders(
+  headers: Record<string, string> | null | undefined
+): Record<string, string> {
+  if (!headers) return {};
+
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([key, value]) => key.trim().length > 0 && value.trim().length > 0
+    )
+  );
+}
+
 /**
  * 校验模型响应是否包含正确答案。
  * 提取响应中的所有数字字符，期望仅出现一个 "2"。
@@ -32,15 +44,28 @@ function isAnswerCorrect(text: string): boolean {
 export async function checkModel(
   baseUrl: string,
   apiKey: string,
-  model: string
+  model: string,
+  requestHeaders?: Record<string, string> | null
 ): Promise<CheckResult> {
   const startTime = Date.now();
 
   try {
     const normalizedBaseUrl = deriveBaseUrl(baseUrl);
+    const customHeaders = normalizeRequestHeaders(requestHeaders);
     const provider = createOpenAI({
       baseURL: normalizedBaseUrl,
       apiKey,
+      fetch: async (input, init) => {
+        const headers = new Headers(init?.headers);
+        for (const [key, value] of Object.entries(customHeaders)) {
+          headers.set(key, value);
+        }
+
+        return fetch(input, {
+          ...init,
+          headers,
+        });
+      },
     });
 
     const { text } = await generateText({

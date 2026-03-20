@@ -55,6 +55,11 @@ export function StatusTimeline({
                     延迟: {entry.latency}ms
                   </div>
                 )}
+                {entry.errorMessage && (
+                  <div className="max-w-[220px] whitespace-normal break-words text-muted-foreground">
+                    {entry.errorMessage}
+                  </div>
+                )}
                 <div className="text-muted-foreground">
                   {new Date(entry.checkedAt).toLocaleString("zh-CN")}
                 </div>

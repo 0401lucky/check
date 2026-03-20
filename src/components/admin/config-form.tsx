@@ -10,6 +10,7 @@ interface ConfigFormProps {
     model: string;
     baseUrl: string;
     apiKey: string;
+    requestHeaders?: Record<string, string> | null;
     groupId: string | null;
     enabled: boolean;
     sortOrder: number;
@@ -32,16 +33,60 @@ export function ConfigForm({
   const [groupId, setGroupId] = useState(config?.groupId ?? "");
   const [enabled, setEnabled] = useState(config?.enabled ?? true);
   const [sortOrder, setSortOrder] = useState(config?.sortOrder ?? 0);
+  const [requestHeadersText, setRequestHeadersText] = useState(
+    config?.requestHeaders
+      ? JSON.stringify(config.requestHeaders, null, 2)
+      : ""
+  );
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [fetchModelsError, setFetchModelsError] = useState("");
+  const [requestHeadersError, setRequestHeadersError] = useState("");
+
+  const parseRequestHeaders = (): Record<string, string> | null => {
+    const trimmed = requestHeadersText.trim();
+    if (!trimmed) return null;
+
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("附加请求头必须是 JSON 对象");
+      }
+
+      const entries = Object.entries(parsed).filter(
+        ([key, value]) =>
+          key.trim().length > 0 && typeof value === "string"
+      );
+
+      return entries.length > 0
+        ? Object.fromEntries(entries)
+        : null;
+    } catch {
+      throw new Error(
+        '附加请求头必须是合法 JSON，例如 {"x-api-key":"xxx"}'
+      );
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setRequestHeadersError("");
+
+    let requestHeaders: Record<string, string> | null = null;
+    try {
+      requestHeaders = parseRequestHeaders();
+    } catch (err) {
+      setRequestHeadersError(
+        err instanceof Error ? err.message : "附加请求头格式错误"
+      );
+      return;
+    }
+
     const data: Record<string, unknown> = {
       name,
       model,
       baseUrl,
+      requestHeaders,
       groupId: groupId || null,
       enabled,
       sortOrder,
@@ -54,6 +99,7 @@ export function ConfigForm({
 
   const handleFetchModels = async () => {
     setFetchModelsError("");
+    setRequestHeadersError("");
 
     if (!baseUrl.trim()) {
       setFetchModelsError("请先填写 API 地址");
@@ -67,12 +113,14 @@ export function ConfigForm({
 
     setFetchingModels(true);
     try {
+      const requestHeaders = parseRequestHeaders();
       const res = await fetch("/api/admin/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim() || undefined,
+          requestHeaders,
           configId: config?.id,
         }),
       });
@@ -104,8 +152,12 @@ export function ConfigForm({
           setName(firstModel);
         }
       }
-    } catch {
-      setFetchModelsError("网络请求失败");
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("JSON")) {
+        setRequestHeadersError(err.message);
+      } else {
+        setFetchModelsError("网络请求失败");
+      }
     } finally {
       setFetchingModels(false);
     }
@@ -175,6 +227,32 @@ export function ConfigForm({
             required={!config}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            附加请求头(JSON)
+          </label>
+          <textarea
+            value={requestHeadersText}
+            onChange={(e) => {
+              setRequestHeadersText(e.target.value);
+              setModelOptions([]);
+              setFetchModelsError("");
+              setRequestHeadersError("");
+            }}
+            rows={4}
+            placeholder={'例如: {\n  "x-api-key": "xxx",\n  "anthropic-version": "2023-06-01"\n}'}
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className="mt-1 text-xs text-muted-foreground">
+            可选。某些供应商兼容接口会要求额外请求头。
+          </div>
+          {requestHeadersError && (
+            <div className="mt-1 text-xs text-destructive">
+              {requestHeadersError}
+            </div>
+          )}
         </div>
 
         <div>

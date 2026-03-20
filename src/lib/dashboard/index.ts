@@ -163,6 +163,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       (h) => ({
         status: h.status as CheckStatus,
         latency: h.latency,
+        errorMessage: h.errorMessage,
         checkedAt: h.checkedAt.toISOString(),
       })
     );
@@ -178,6 +179,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       name: config.name,
       model: config.model,
       currentStatus: (latest?.status as CheckStatus) ?? "error",
+      currentMessage: latest?.errorMessage ?? null,
       latency: latest?.latency ?? null,
       lastCheckedAt: latest?.checkedAt.toISOString() ?? null,
       uptimePercent7d: uptime.uptimePercent7d,

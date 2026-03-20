@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { invalidateCache } from "@/lib/dashboard";
 import { verifyAuth } from "@/lib/admin-auth";
@@ -11,6 +12,33 @@ function maskApiKey(key: string): string {
 function stripSensitive(config: Record<string, unknown>) {
   const { apiKey, ...rest } = config;
   return { ...rest, apiKey: maskApiKey(String(apiKey ?? "")) };
+}
+
+function parseRequestHeaders(
+  value: unknown
+): Record<string, string> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = Object.entries(value).filter(
+    ([key, headerValue]) =>
+      key.trim().length > 0 && typeof headerValue === "string"
+  );
+
+  return entries.length > 0
+    ? Object.fromEntries(entries)
+    : null;
+}
+
+function toCreateRequestHeaders(value: unknown) {
+  const parsed = parseRequestHeaders(value);
+  return parsed ?? undefined;
+}
+
+function toUpdateRequestHeaders(value: unknown) {
+  const parsed = parseRequestHeaders(value);
+  return parsed ?? Prisma.DbNull;
 }
 
 export async function GET(request: NextRequest) {
@@ -38,7 +66,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, model, baseUrl, apiKey, groupId, enabled, sortOrder } = body;
+    const {
+      name,
+      model,
+      baseUrl,
+      apiKey,
+      requestHeaders,
+      groupId,
+      enabled,
+      sortOrder,
+    } = body;
 
     if (!name || !model || !baseUrl || !apiKey) {
       return NextResponse.json(
@@ -53,6 +90,7 @@ export async function POST(request: NextRequest) {
         model: String(model),
         baseUrl: String(baseUrl),
         apiKey: String(apiKey),
+        requestHeaders: toCreateRequestHeaders(requestHeaders),
         groupId: groupId ? String(groupId) : null,
         enabled: enabled ?? true,
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
@@ -77,7 +115,17 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { id, name, model, baseUrl, apiKey, groupId, enabled, sortOrder } = body;
+    const {
+      id,
+      name,
+      model,
+      baseUrl,
+      apiKey,
+      requestHeaders,
+      groupId,
+      enabled,
+      sortOrder,
+    } = body;
 
     if (!id) {
       return NextResponse.json({ error: "缺少 id" }, { status: 400 });
@@ -89,6 +137,9 @@ export async function PUT(request: NextRequest) {
     if (model !== undefined) data.model = String(model);
     if (baseUrl !== undefined) data.baseUrl = String(baseUrl);
     if (apiKey) data.apiKey = String(apiKey);
+    if (requestHeaders !== undefined) {
+      data.requestHeaders = toUpdateRequestHeaders(requestHeaders);
+    }
     if (groupId !== undefined) data.groupId = groupId ? String(groupId) : null;
     if (enabled !== undefined) {
       const newEnabled = Boolean(enabled);

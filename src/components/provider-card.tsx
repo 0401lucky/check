@@ -65,6 +65,15 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
         <StatusTimeline history={config.history} />
       </div>
 
+      {config.currentMessage && (
+        <div
+          className="mt-3 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground"
+          title={config.currentMessage}
+        >
+          最近结果: {config.currentMessage}
+        </div>
+      )}
+
       <div className="mt-2 text-right text-[11px] text-muted-foreground">
         最后检查: {formatTime(config.lastCheckedAt)}
       </div>

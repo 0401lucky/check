@@ -13,6 +13,7 @@ interface ConfigItem {
   model: string;
   baseUrl: string;
   apiKey: string;
+  requestHeaders: Record<string, string> | null;
   groupId: string | null;
   enabled: boolean;
   sortOrder: number;

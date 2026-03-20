@@ -11,6 +11,7 @@ export interface DashboardConfig {
   name: string;
   model: string;
   currentStatus: CheckStatus;
+  currentMessage: string | null;
   latency: number | null;
   lastCheckedAt: string | null;
   uptimePercent7d: number | null;
@@ -22,6 +23,7 @@ export interface DashboardConfig {
 export interface DashboardHistoryEntry {
   status: CheckStatus;
   latency: number | null;
+  errorMessage: string | null;
   checkedAt: string;
 }
 

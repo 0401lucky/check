@@ -152,7 +152,8 @@ async function runChecks() {
           const result = await checkModel(
             config.baseUrl,
             config.apiKey,
-            config.model
+            config.model,
+            (config.requestHeaders as Record<string, string> | null) ?? null
           );
 
           return { configId: config.id, result };

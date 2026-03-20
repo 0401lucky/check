@@ -8,6 +8,7 @@ interface ConfigItem {
   model: string;
   baseUrl: string;
   apiKey: string;
+  requestHeaders: Record<string, string> | null;
   groupId: string | null;
   enabled: boolean;
   sortOrder: number;
@@ -46,6 +47,9 @@ export function ConfigTable({
               API 地址
             </th>
             <th className="px-4 py-3 font-medium">分组</th>
+            <th className="hidden px-4 py-3 font-medium lg:table-cell">
+              附加请求头
+            </th>
             <th className="px-4 py-3 font-medium">状态</th>
             <th className="px-4 py-3 font-medium">操作</th>
           </tr>
@@ -62,6 +66,11 @@ export function ConfigTable({
               </td>
               <td className="px-4 py-3 text-muted-foreground">
                 {config.group?.name ?? "-"}
+              </td>
+              <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
+                {config.requestHeaders
+                  ? `${Object.keys(config.requestHeaders).length} 项`
+                  : "-"}
               </td>
               <td className="px-4 py-3">
                 <button

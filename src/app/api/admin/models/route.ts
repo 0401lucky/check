@@ -36,6 +36,24 @@ function extractErrorMessage(payload: unknown): string | null {
   return typeof message === "string" ? message : null;
 }
 
+function normalizeRequestHeaders(
+  input: unknown
+): Record<string, string> | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+
+  const entries = Object.entries(input).filter(
+    ([key, value]) => key.trim().length > 0 && typeof value === "string"
+  );
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return Object.fromEntries(entries);
+}
+
 export async function POST(request: NextRequest) {
   if (!(await verifyAuth(request))) {
     return NextResponse.json({ error: "未授权" }, { status: 401 });
@@ -49,6 +67,7 @@ export async function POST(request: NextRequest) {
       typeof body.apiKey === "string" ? body.apiKey.trim() : "";
     const configId =
       typeof body.configId === "string" ? body.configId.trim() : "";
+    const rawRequestHeaders = normalizeRequestHeaders(body.requestHeaders);
 
     if (!baseUrl) {
       return NextResponse.json(
@@ -58,10 +77,11 @@ export async function POST(request: NextRequest) {
     }
 
     let apiKey = rawApiKey;
+    let requestHeaders = rawRequestHeaders;
     if (!apiKey && configId) {
       const config = await db.checkConfig.findUnique({
         where: { id: configId },
-        select: { apiKey: true, baseUrl: true },
+        select: { apiKey: true, requestHeaders: true },
       });
 
       if (!config) {
@@ -72,6 +92,9 @@ export async function POST(request: NextRequest) {
       }
 
       apiKey = config.apiKey;
+      requestHeaders =
+        requestHeaders ??
+        normalizeRequestHeaders(config.requestHeaders);
     }
 
     if (!apiKey) {
@@ -87,6 +110,7 @@ export async function POST(request: NextRequest) {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
+        ...(requestHeaders ?? {}),
       },
       signal: AbortSignal.timeout(15_000),
       cache: "no-store",
