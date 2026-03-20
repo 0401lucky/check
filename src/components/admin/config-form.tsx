@@ -28,6 +28,7 @@ export function ConfigForm({
   onSave,
   onCancel,
 }: ConfigFormProps) {
+  const isEditing = Boolean(config?.id);
   const [name, setName] = useState(config?.name ?? "");
   const [model, setModel] = useState(config?.model ?? "");
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl ?? "");
@@ -47,6 +48,7 @@ export function ConfigForm({
       : ""
   );
   const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [fetchModelsError, setFetchModelsError] = useState("");
   const [metadataError, setMetadataError] = useState("");
@@ -116,9 +118,22 @@ export function ConfigForm({
       return;
     }
 
+    const normalizedSelectedModels = Array.from(
+      new Set(selectedModels.map((item) => item.trim()).filter(Boolean))
+    );
+    const isBulkCreate = !isEditing && normalizedSelectedModels.length > 1;
+    const resolvedModel =
+      !isEditing && normalizedSelectedModels.length === 1
+        ? normalizedSelectedModels[0]
+        : model.trim();
+
+    if (!resolvedModel && !isBulkCreate) {
+      return;
+    }
+
     const data: Record<string, unknown> = {
-      name,
-      model,
+      name: name.trim(),
+      model: resolvedModel,
       baseUrl,
       metadata,
       requestHeaders,
@@ -127,6 +142,12 @@ export function ConfigForm({
       isMaintenance,
       sortOrder,
     };
+
+    if (isBulkCreate) {
+      data.models = normalizedSelectedModels;
+      data.namePrefix = name.trim() || null;
+    }
+
     // 只在新建或填写了 apiKey 时才传
     if (apiKey) data.apiKey = apiKey;
     if (!config) data.apiKey = apiKey; // 新建时必传
@@ -178,6 +199,7 @@ export function ConfigForm({
         : [];
 
       setModelOptions(models);
+      setSelectedModels([]);
 
       if (models.length === 0) {
         setFetchModelsError("接口返回了空模型列表");
@@ -221,14 +243,21 @@ export function ConfigForm({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium">
-            显示名称 <span className="text-destructive">*</span>
+            显示名称
+            {!(!isEditing && selectedModels.length > 1) && (
+              <span className="text-destructive"> *</span>
+            )}
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="例如: GPT-4o"
-            required
+            placeholder={
+              !isEditing && selectedModels.length > 1
+                ? "批量创建时可选，留空则直接使用模型名"
+                : "例如: GPT-4o"
+            }
+            required={!(!isEditing && selectedModels.length > 1)}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -243,6 +272,7 @@ export function ConfigForm({
             onChange={(e) => {
               setBaseUrl(e.target.value);
               setModelOptions([]);
+              setSelectedModels([]);
               setFetchModelsError("");
             }}
             placeholder="例如: https://api.openai.com/v1"
@@ -262,6 +292,7 @@ export function ConfigForm({
             onChange={(e) => {
               setApiKey(e.target.value);
               setModelOptions([]);
+              setSelectedModels([]);
               setFetchModelsError("");
             }}
             placeholder={config ? "留空则不修改" : "sk-..."}
@@ -279,6 +310,7 @@ export function ConfigForm({
             onChange={(e) => {
               setMetadataText(e.target.value);
               setModelOptions([]);
+              setSelectedModels([]);
               setFetchModelsError("");
               setMetadataError("");
             }}
@@ -305,6 +337,7 @@ export function ConfigForm({
             onChange={(e) => {
               setRequestHeadersText(e.target.value);
               setModelOptions([]);
+              setSelectedModels([]);
               setFetchModelsError("");
               setRequestHeadersError("");
             }}
@@ -324,14 +357,17 @@ export function ConfigForm({
 
         <div>
           <label className="mb-1 block text-sm font-medium">
-            模型标识符 <span className="text-destructive">*</span>
+            模型标识符
+            {!(!isEditing && selectedModels.length > 1) && (
+              <span className="text-destructive"> *</span>
+            )}
           </label>
           <input
             type="text"
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="例如: gpt-4o"
-            required
+            required={!(!isEditing && selectedModels.length > 1)}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -378,6 +414,70 @@ export function ConfigForm({
             </div>
           )}
         </div>
+
+        {!isEditing && modelOptions.length > 0 && (
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium">
+                批量选择模型
+              </label>
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedModels(modelOptions);
+                    if (!model.trim() && modelOptions[0]) {
+                      setModel(modelOptions[0]);
+                    }
+                  }}
+                  className="rounded-md border px-2 py-1 hover:bg-accent"
+                >
+                  全选
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedModels([])}
+                  className="rounded-md border px-2 py-1 hover:bg-accent"
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+            <div className="max-h-56 overflow-y-auto rounded-lg border bg-background p-3">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {modelOptions.map((item) => {
+                  const checked = selectedModels.includes(item);
+                  return (
+                    <label
+                      key={item}
+                      className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 hover:bg-accent/50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...selectedModels, item]
+                            : selectedModels.filter((value) => value !== item);
+                          setSelectedModels(next);
+                          if (e.target.checked && !model.trim()) {
+                            setModel(item);
+                          }
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded border"
+                      />
+                      <span className="min-w-0 break-all text-sm">{item}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              已选择 {selectedModels.length} 个模型。选择多个后，点击“创建”会一次性批量新增。
+              显示名称如果填写，会作为前缀拼到每个模型前面。
+            </div>
+          </div>
+        )}
 
           <div className="grid gap-4 sm:grid-cols-3">
           <div>

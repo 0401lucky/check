@@ -88,7 +88,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       name,
+      namePrefix,
       model,
+      models,
       baseUrl,
       apiKey,
       metadata,
@@ -99,10 +101,63 @@ export async function POST(request: NextRequest) {
       sortOrder,
     } = body;
 
-    if (!name || !model || !baseUrl || !apiKey) {
+    const normalizedModels = Array.isArray(models)
+      ? Array.from(
+          new Set(
+            models
+              .filter((item): item is string => typeof item === "string")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          )
+        )
+      : [];
+
+    const isBulkCreate = normalizedModels.length > 1;
+
+    if (
+      (!isBulkCreate && (!name || !model)) ||
+      !baseUrl ||
+      !apiKey
+    ) {
       return NextResponse.json(
         { error: "缺少必填字段：name, model, baseUrl, apiKey" },
         { status: 400 }
+      );
+    }
+
+    if (isBulkCreate) {
+      const created = await db.$transaction(
+        normalizedModels.map((item, index) =>
+          db.checkConfig.create({
+            data: {
+              name:
+                typeof namePrefix === "string" && namePrefix.trim()
+                  ? `${namePrefix.trim()} - ${item}`
+                  : item,
+              model: item,
+              baseUrl: String(baseUrl),
+              apiKey: String(apiKey),
+              metadata: toCreateMetadata(metadata),
+              requestHeaders: toCreateRequestHeaders(requestHeaders),
+              groupId: groupId ? String(groupId) : null,
+              enabled: enabled ?? true,
+              isMaintenance: Boolean(isMaintenance),
+              sortOrder:
+                typeof sortOrder === "number" ? sortOrder + index : index,
+            },
+          })
+        )
+      );
+
+      invalidateCache();
+      return NextResponse.json(
+        {
+          createdCount: created.length,
+          configs: created.map((item) =>
+            stripSensitive(item as unknown as Record<string, unknown>)
+          ),
+        },
+        { status: 201 }
       );
     }
 
