@@ -135,8 +135,16 @@ async function runChecks() {
   isRunning = true;
   try {
     const configs = await db.checkConfig.findMany({
-      where: { enabled: true },
+      where: { enabled: true, isMaintenance: false },
       orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        baseUrl: true,
+        apiKey: true,
+        model: true,
+        requestHeaders: true,
+        metadata: true,
+      },
     });
 
     for (let i = 0; i < configs.length; i += CONCURRENCY) {
@@ -153,7 +161,8 @@ async function runChecks() {
             config.baseUrl,
             config.apiKey,
             config.model,
-            (config.requestHeaders as Record<string, string> | null) ?? null
+            (config.requestHeaders as Record<string, string> | null) ?? null,
+            (config.metadata as Record<string, unknown> | null) ?? null
           );
 
           return { configId: config.id, result };

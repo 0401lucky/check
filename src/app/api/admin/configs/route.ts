@@ -41,6 +41,26 @@ function toUpdateRequestHeaders(value: unknown) {
   return parsed ?? Prisma.DbNull;
 }
 
+function parseMetadata(
+  value: unknown
+): Prisma.InputJsonValue | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Prisma.InputJsonValue;
+}
+
+function toCreateMetadata(value: unknown) {
+  const parsed = parseMetadata(value);
+  return parsed ?? undefined;
+}
+
+function toUpdateMetadata(value: unknown) {
+  const parsed = parseMetadata(value);
+  return parsed ?? Prisma.DbNull;
+}
+
 export async function GET(request: NextRequest) {
   if (!(await verifyAuth(request))) {
     return NextResponse.json({ error: "未授权" }, { status: 401 });
@@ -71,9 +91,11 @@ export async function POST(request: NextRequest) {
       model,
       baseUrl,
       apiKey,
+      metadata,
       requestHeaders,
       groupId,
       enabled,
+      isMaintenance,
       sortOrder,
     } = body;
 
@@ -90,9 +112,11 @@ export async function POST(request: NextRequest) {
         model: String(model),
         baseUrl: String(baseUrl),
         apiKey: String(apiKey),
+        metadata: toCreateMetadata(metadata),
         requestHeaders: toCreateRequestHeaders(requestHeaders),
         groupId: groupId ? String(groupId) : null,
         enabled: enabled ?? true,
+        isMaintenance: Boolean(isMaintenance),
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
       },
     });
@@ -121,9 +145,11 @@ export async function PUT(request: NextRequest) {
       model,
       baseUrl,
       apiKey,
+      metadata,
       requestHeaders,
       groupId,
       enabled,
+      isMaintenance,
       sortOrder,
     } = body;
 
@@ -137,6 +163,9 @@ export async function PUT(request: NextRequest) {
     if (model !== undefined) data.model = String(model);
     if (baseUrl !== undefined) data.baseUrl = String(baseUrl);
     if (apiKey) data.apiKey = String(apiKey);
+    if (metadata !== undefined) {
+      data.metadata = toUpdateMetadata(metadata);
+    }
     if (requestHeaders !== undefined) {
       data.requestHeaders = toUpdateRequestHeaders(requestHeaders);
     }
@@ -154,6 +183,9 @@ export async function PUT(request: NextRequest) {
           data.enabledAt = new Date();
         }
       }
+    }
+    if (isMaintenance !== undefined) {
+      data.isMaintenance = Boolean(isMaintenance);
     }
     if (sortOrder !== undefined) data.sortOrder = typeof sortOrder === "number" ? sortOrder : 0;
 

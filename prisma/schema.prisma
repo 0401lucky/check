@@ -13,10 +13,12 @@ model CheckConfig {
   model     String
   baseUrl   String   @map("base_url")
   apiKey    String   @map("api_key")
+  metadata  Json?    @map("metadata")
   requestHeaders Json? @map("request_headers")
   groupId   String?  @map("group_id")
   group     Group?   @relation(fields: [groupId], references: [id])
   enabled   Boolean  @default(true)
+  isMaintenance Boolean @default(false) @map("is_maintenance")
   enabledAt DateTime @default(now()) @map("enabled_at")
   sortOrder Int      @default(0) @map("sort_order")
   history   CheckHistory[]

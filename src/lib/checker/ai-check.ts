@@ -5,6 +5,12 @@ import type { CheckResult, CheckStatus } from "./types";
 const DEGRADED_THRESHOLD_MS = 6000;
 const TIMEOUT_MS = 30000;
 const API_PATH_SUFFIX_REGEX = /\/(chat\/completions|responses|models)\/?$/;
+const EXCLUDED_METADATA_KEYS = new Set([
+  "model",
+  "prompt",
+  "messages",
+  "abortSignal",
+]);
 
 function normalizeInputUrl(input: string): string {
   const [pathWithoutQuery] = input.trim().split("?");
@@ -32,6 +38,20 @@ function normalizeRequestHeaders(
   );
 }
 
+function normalizeMetadata(
+  metadata: Record<string, unknown> | null | undefined
+): Record<string, unknown> | null {
+  if (!metadata) return null;
+
+  const filtered = Object.fromEntries(
+    Object.entries(metadata).filter(
+      ([key]) => !EXCLUDED_METADATA_KEYS.has(key)
+    )
+  );
+
+  return Object.keys(filtered).length > 0 ? filtered : null;
+}
+
 /**
  * 校验模型响应是否包含正确答案。
  * 提取响应中的所有数字字符，期望仅出现一个 "2"。
@@ -45,13 +65,15 @@ export async function checkModel(
   baseUrl: string,
   apiKey: string,
   model: string,
-  requestHeaders?: Record<string, string> | null
+  requestHeaders?: Record<string, string> | null,
+  metadata?: Record<string, unknown> | null
 ): Promise<CheckResult> {
   const startTime = Date.now();
 
   try {
     const normalizedBaseUrl = deriveBaseUrl(baseUrl);
     const customHeaders = normalizeRequestHeaders(requestHeaders);
+    const customMetadata = normalizeMetadata(metadata);
     const provider = createOpenAI({
       baseURL: normalizedBaseUrl,
       apiKey,
@@ -59,6 +81,29 @@ export async function checkModel(
         const headers = new Headers(init?.headers);
         for (const [key, value] of Object.entries(customHeaders)) {
           headers.set(key, value);
+        }
+
+        if (
+          customMetadata &&
+          init?.method?.toUpperCase() === "POST" &&
+          typeof init.body === "string"
+        ) {
+          try {
+            const originalBody = JSON.parse(init.body) as Record<
+              string,
+              unknown
+            >;
+            return fetch(input, {
+              ...init,
+              headers,
+              body: JSON.stringify({
+                ...originalBody,
+                ...customMetadata,
+              }),
+            });
+          } catch {
+            // 保留原始 body，避免因解析失败中断请求
+          }
         }
 
         return fetch(input, {

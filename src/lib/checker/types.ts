@@ -1,4 +1,9 @@
-export type CheckStatus = "operational" | "degraded" | "failed" | "error";
+export type CheckStatus =
+  | "operational"
+  | "degraded"
+  | "failed"
+  | "maintenance"
+  | "error";
 
 export interface CheckResult {
   status: CheckStatus;
@@ -12,6 +17,7 @@ export interface DashboardConfig {
   model: string;
   currentStatus: CheckStatus;
   currentMessage: string | null;
+  isMaintenance: boolean;
   latency: number | null;
   lastCheckedAt: string | null;
   uptimePercent7d: number | null;

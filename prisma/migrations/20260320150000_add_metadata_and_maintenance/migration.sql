@@ -1,0 +1,9 @@
+BEGIN;
+
+ALTER TABLE "check_configs"
+  ADD COLUMN IF NOT EXISTS "metadata" JSONB;
+
+ALTER TABLE "check_configs"
+  ADD COLUMN IF NOT EXISTS "is_maintenance" BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMIT;

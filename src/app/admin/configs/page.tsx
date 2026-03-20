@@ -13,9 +13,11 @@ interface ConfigItem {
   model: string;
   baseUrl: string;
   apiKey: string;
+  metadata: Record<string, unknown> | null;
   requestHeaders: Record<string, string> | null;
   groupId: string | null;
   enabled: boolean;
+  isMaintenance: boolean;
   sortOrder: number;
   group: { id: string; name: string } | null;
 }

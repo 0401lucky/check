@@ -8,6 +8,7 @@ const statusColorMap: Record<string, string> = {
   operational: "bg-status-operational",
   degraded: "bg-status-degraded",
   failed: "bg-status-failed",
+  maintenance: "bg-status-degraded",
   error: "bg-status-error",
 };
 
@@ -15,6 +16,7 @@ const statusLabelMap: Record<string, string> = {
   operational: "正常",
   degraded: "缓慢",
   failed: "故障",
+  maintenance: "维护中",
   error: "异常",
 };
 

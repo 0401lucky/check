@@ -10,9 +10,11 @@ interface ConfigFormProps {
     model: string;
     baseUrl: string;
     apiKey: string;
+    metadata?: Record<string, unknown> | null;
     requestHeaders?: Record<string, string> | null;
     groupId: string | null;
     enabled: boolean;
+    isMaintenance?: boolean;
     sortOrder: number;
   } | null;
   groups: { id: string; name: string }[];
@@ -32,7 +34,13 @@ export function ConfigForm({
   const [apiKey, setApiKey] = useState("");
   const [groupId, setGroupId] = useState(config?.groupId ?? "");
   const [enabled, setEnabled] = useState(config?.enabled ?? true);
+  const [isMaintenance, setIsMaintenance] = useState(
+    config?.isMaintenance ?? false
+  );
   const [sortOrder, setSortOrder] = useState(config?.sortOrder ?? 0);
+  const [metadataText, setMetadataText] = useState(
+    config?.metadata ? JSON.stringify(config.metadata, null, 2) : ""
+  );
   const [requestHeadersText, setRequestHeadersText] = useState(
     config?.requestHeaders
       ? JSON.stringify(config.requestHeaders, null, 2)
@@ -41,7 +49,26 @@ export function ConfigForm({
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [fetchModelsError, setFetchModelsError] = useState("");
+  const [metadataError, setMetadataError] = useState("");
   const [requestHeadersError, setRequestHeadersError] = useState("");
+
+  const parseMetadata = (): Record<string, unknown> | null => {
+    const trimmed = metadataText.trim();
+    if (!trimmed) return null;
+
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("附加请求参数必须是 JSON 对象");
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      throw new Error(
+        '附加请求参数必须是合法 JSON，例如 {"temperature":0.2}'
+      );
+    }
+  };
 
   const parseRequestHeaders = (): Record<string, string> | null => {
     const trimmed = requestHeadersText.trim();
@@ -70,15 +97,22 @@ export function ConfigForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setMetadataError("");
     setRequestHeadersError("");
 
+    let metadata: Record<string, unknown> | null = null;
     let requestHeaders: Record<string, string> | null = null;
     try {
+      metadata = parseMetadata();
       requestHeaders = parseRequestHeaders();
     } catch (err) {
-      setRequestHeadersError(
-        err instanceof Error ? err.message : "附加请求头格式错误"
-      );
+      const message =
+        err instanceof Error ? err.message : "JSON 配置格式错误";
+      if (message.includes("请求头")) {
+        setRequestHeadersError(message);
+      } else {
+        setMetadataError(message);
+      }
       return;
     }
 
@@ -86,9 +120,11 @@ export function ConfigForm({
       name,
       model,
       baseUrl,
+      metadata,
       requestHeaders,
       groupId: groupId || null,
       enabled,
+      isMaintenance,
       sortOrder,
     };
     // 只在新建或填写了 apiKey 时才传
@@ -99,6 +135,7 @@ export function ConfigForm({
 
   const handleFetchModels = async () => {
     setFetchModelsError("");
+    setMetadataError("");
     setRequestHeadersError("");
 
     if (!baseUrl.trim()) {
@@ -113,6 +150,7 @@ export function ConfigForm({
 
     setFetchingModels(true);
     try {
+      const metadata = parseMetadata();
       const requestHeaders = parseRequestHeaders();
       const res = await fetch("/api/admin/models", {
         method: "POST",
@@ -120,6 +158,7 @@ export function ConfigForm({
         body: JSON.stringify({
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim() || undefined,
+          metadata,
           requestHeaders,
           configId: config?.id,
         }),
@@ -153,8 +192,10 @@ export function ConfigForm({
         }
       }
     } catch (err) {
-      if (err instanceof Error && err.message.includes("JSON")) {
+      if (err instanceof Error && err.message.includes("请求头")) {
         setRequestHeadersError(err.message);
+      } else if (err instanceof Error && err.message.includes("请求参数")) {
+        setMetadataError(err.message);
       } else {
         setFetchModelsError("网络请求失败");
       }
@@ -227,6 +268,32 @@ export function ConfigForm({
             required={!config}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            附加请求参数(JSON)
+          </label>
+          <textarea
+            value={metadataText}
+            onChange={(e) => {
+              setMetadataText(e.target.value);
+              setModelOptions([]);
+              setFetchModelsError("");
+              setMetadataError("");
+            }}
+            rows={4}
+            placeholder={'例如: {\n  "temperature": 0.2,\n  "max_tokens": 32\n}'}
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className="mt-1 text-xs text-muted-foreground">
+            可选。会直接并入请求体，适合某些兼容接口的自定义参数。
+          </div>
+          {metadataError && (
+            <div className="mt-1 text-xs text-destructive">
+              {metadataError}
+            </div>
+          )}
         </div>
 
         <div>
@@ -312,7 +379,7 @@ export function ConfigForm({
           )}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-medium">所属分组</label>
             <select
@@ -337,7 +404,7 @@ export function ConfigForm({
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex flex-col justify-end gap-3">
             <label className="flex cursor-pointer items-center gap-2">
               <input
                 type="checkbox"
@@ -346,6 +413,15 @@ export function ConfigForm({
                 className="h-4 w-4 rounded border"
               />
               <span className="text-sm">启用监控</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isMaintenance}
+                onChange={(e) => setIsMaintenance(e.target.checked)}
+                className="h-4 w-4 rounded border"
+              />
+              <span className="text-sm">维护模式</span>
             </label>
           </div>
         </div>

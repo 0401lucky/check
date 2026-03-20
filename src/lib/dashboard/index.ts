@@ -118,11 +118,19 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const groups = await db.group.findMany({
     orderBy: { sortOrder: "asc" },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      description: true,
       configs: {
         where: { enabled: true },
         orderBy: { sortOrder: "asc" },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          model: true,
+          isMaintenance: true,
+          enabledAt: true,
           history: {
             orderBy: { checkedAt: "desc" },
             take: 60,
@@ -135,7 +143,12 @@ export async function getDashboardData(): Promise<DashboardData> {
   const ungroupedConfigs = await db.checkConfig.findMany({
     where: { enabled: true, groupId: null },
     orderBy: { sortOrder: "asc" },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      model: true,
+      isMaintenance: true,
+      enabledAt: true,
       history: {
         orderBy: { checkedAt: "desc" },
         take: 60,
@@ -178,13 +191,20 @@ export async function getDashboardData(): Promise<DashboardData> {
       id: config.id,
       name: config.name,
       model: config.model,
-      currentStatus: (latest?.status as CheckStatus) ?? "error",
-      currentMessage: latest?.errorMessage ?? null,
-      latency: latest?.latency ?? null,
-      lastCheckedAt: latest?.checkedAt.toISOString() ?? null,
-      uptimePercent7d: uptime.uptimePercent7d,
-      uptimePercent15d: uptime.uptimePercent15d,
-      uptimePercent30d: uptime.uptimePercent30d,
+      currentStatus: config.isMaintenance
+        ? "maintenance"
+        : (latest?.status as CheckStatus) ?? "error",
+      currentMessage: config.isMaintenance
+        ? "配置处于维护模式"
+        : latest?.errorMessage ?? null,
+      isMaintenance: config.isMaintenance,
+      latency: config.isMaintenance ? null : latest?.latency ?? null,
+      lastCheckedAt: config.isMaintenance
+        ? null
+        : latest?.checkedAt.toISOString() ?? null,
+      uptimePercent7d: config.isMaintenance ? null : uptime.uptimePercent7d,
+      uptimePercent15d: config.isMaintenance ? null : uptime.uptimePercent15d,
+      uptimePercent30d: config.isMaintenance ? null : uptime.uptimePercent30d,
       history: historyEntries,
     };
   }
