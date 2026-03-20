@@ -23,6 +23,12 @@ export interface DashboardConfig {
   uptimePercent7d: number | null;
   uptimePercent15d: number | null;
   uptimePercent30d: number | null;
+  successCount7d: number | null;
+  totalCount7d: number | null;
+  successCount15d: number | null;
+  totalCount15d: number | null;
+  successCount30d: number | null;
+  totalCount30d: number | null;
   history: DashboardHistoryEntry[];
 }
 

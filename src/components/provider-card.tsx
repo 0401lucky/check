@@ -26,6 +26,14 @@ function formatUptime(value: number | null): string {
   return `${value}%`;
 }
 
+function formatSuccessStats(
+  successCount: number | null,
+  totalCount: number | null
+): string {
+  if (successCount === null || totalCount === null) return "暂无数据";
+  return `${successCount}/${totalCount} 成功`;
+}
+
 const statusToneMap = {
   operational:
     "border-status-operational/30 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(237,252,244,0.94))]",
@@ -80,6 +88,9 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
           <div className="mt-1 text-sm font-semibold">
             {formatUptime(config.uptimePercent7d)}
           </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            {formatSuccessStats(config.successCount7d, config.totalCount7d)}
+          </div>
         </div>
         <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3 text-center">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -87,6 +98,9 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
           </div>
           <div className="mt-1 text-sm font-semibold">
             {formatUptime(config.uptimePercent30d)}
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            {formatSuccessStats(config.successCount30d, config.totalCount30d)}
           </div>
         </div>
       </div>

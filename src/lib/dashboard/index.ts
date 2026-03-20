@@ -20,6 +20,12 @@ interface UptimeStats {
   uptimePercent7d: number | null;
   uptimePercent15d: number | null;
   uptimePercent30d: number | null;
+  successCount7d: number | null;
+  totalCount7d: number | null;
+  successCount15d: number | null;
+  totalCount15d: number | null;
+  successCount30d: number | null;
+  totalCount30d: number | null;
 }
 
 /**
@@ -71,11 +77,11 @@ async function calculateUptime(
 
   const maps = allStats.map(processStats);
 
-  function pct(
+  function calculateWindowStats(
     m: Map<string, { total: number; up: number }>,
     id: string,
     windowMs: number
-  ): number | null {
+  ): { percent: number | null; success: number | null; total: number | null } {
     const s = m.get(id);
     const enabledAt = configEnabledAtMap.get(id);
 
@@ -88,7 +94,9 @@ async function calculateUptime(
     // 期望采样数
     const expectedSamples = Math.floor(effectiveWindowMs / (POLL_INTERVAL_S * 1000));
 
-    if (expectedSamples <= 0) return null;
+    if (expectedSamples <= 0) {
+      return { percent: null, success: null, total: null };
+    }
 
     const actualTotal = s?.total ?? 0;
     const up = s?.up ?? 0;
@@ -96,14 +104,28 @@ async function calculateUptime(
     // 分母取 max(实际记录数, 期望采样数)，缺失的采样隐式算作不可用
     const denominator = Math.max(actualTotal, expectedSamples);
 
-    return Math.round((up / denominator) * 10000) / 100;
+    return {
+      percent: Math.round((up / denominator) * 10000) / 100,
+      success: up,
+      total: denominator,
+    };
   }
 
   for (const id of configIds) {
+    const stats7d = calculateWindowStats(maps[0], id, windows[0].ms);
+    const stats15d = calculateWindowStats(maps[1], id, windows[1].ms);
+    const stats30d = calculateWindowStats(maps[2], id, windows[2].ms);
+
     result.set(id, {
-      uptimePercent7d: pct(maps[0], id, windows[0].ms),
-      uptimePercent15d: pct(maps[1], id, windows[1].ms),
-      uptimePercent30d: pct(maps[2], id, windows[2].ms),
+      uptimePercent7d: stats7d.percent,
+      uptimePercent15d: stats15d.percent,
+      uptimePercent30d: stats30d.percent,
+      successCount7d: stats7d.success,
+      totalCount7d: stats7d.total,
+      successCount15d: stats15d.success,
+      totalCount15d: stats15d.total,
+      successCount30d: stats30d.success,
+      totalCount30d: stats30d.total,
     });
   }
 
@@ -185,6 +207,12 @@ export async function getDashboardData(): Promise<DashboardData> {
       uptimePercent7d: null,
       uptimePercent15d: null,
       uptimePercent30d: null,
+      successCount7d: null,
+      totalCount7d: null,
+      successCount15d: null,
+      totalCount15d: null,
+      successCount30d: null,
+      totalCount30d: null,
     };
 
     return {
@@ -205,6 +233,12 @@ export async function getDashboardData(): Promise<DashboardData> {
       uptimePercent7d: config.isMaintenance ? null : uptime.uptimePercent7d,
       uptimePercent15d: config.isMaintenance ? null : uptime.uptimePercent15d,
       uptimePercent30d: config.isMaintenance ? null : uptime.uptimePercent30d,
+      successCount7d: config.isMaintenance ? null : uptime.successCount7d,
+      totalCount7d: config.isMaintenance ? null : uptime.totalCount7d,
+      successCount15d: config.isMaintenance ? null : uptime.successCount15d,
+      totalCount15d: config.isMaintenance ? null : uptime.totalCount15d,
+      successCount30d: config.isMaintenance ? null : uptime.successCount30d,
+      totalCount30d: config.isMaintenance ? null : uptime.totalCount30d,
       history: historyEntries,
     };
   }
