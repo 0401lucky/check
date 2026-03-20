@@ -16,7 +16,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="min-h-screen antialiased">
         <Header />
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-5 lg:px-6">
           {children}
         </main>
       </body>
