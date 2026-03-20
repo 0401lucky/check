@@ -68,6 +68,37 @@ export function DashboardView() {
   const [collapsedGroups, setCollapsedGroups] = useState<
     Record<string, boolean>
   >({});
+  const groups = data?.groups ?? [];
+  const ungrouped = data?.ungrouped ?? [];
+  const hasConfigs =
+    groups.some((group) => group.configs.length > 0) ||
+    ungrouped.length > 0;
+  const allConfigs = [...groups.flatMap((group) => group.configs), ...ungrouped];
+  const summary = {
+    total: allConfigs.length,
+    operational: allConfigs.filter(
+      (item) => item.currentStatus === "operational"
+    ).length,
+    degraded: allConfigs.filter((item) => item.currentStatus === "degraded")
+      .length,
+    failed: allConfigs.filter(
+      (item) =>
+        item.currentStatus === "failed" || item.currentStatus === "error"
+    ).length,
+    maintenance: allConfigs.filter(
+      (item) => item.currentStatus === "maintenance"
+    ).length,
+  };
+  const groupSummaries = useMemo(() => {
+    const entries = new Map<string, ReturnType<typeof summarizeStatuses>>();
+
+    for (const group of groups) {
+      entries.set(group.id, summarizeStatuses(group.configs));
+    }
+
+    entries.set("ungrouped", summarizeStatuses(ungrouped));
+    return entries;
+  }, [groups, ungrouped]);
 
   if (isLoading) {
     return (
@@ -86,40 +117,6 @@ export function DashboardView() {
       </div>
     );
   }
-
-  const hasConfigs =
-    data.groups.some((g) => g.configs.length > 0) ||
-    data.ungrouped.length > 0;
-
-  const allConfigs = [
-    ...data.groups.flatMap((group) => group.configs),
-    ...data.ungrouped,
-  ];
-
-  const summary = {
-    total: allConfigs.length,
-    operational: allConfigs.filter((item) => item.currentStatus === "operational")
-      .length,
-    degraded: allConfigs.filter((item) => item.currentStatus === "degraded").length,
-    failed: allConfigs.filter(
-      (item) =>
-        item.currentStatus === "failed" || item.currentStatus === "error"
-    ).length,
-    maintenance: allConfigs.filter(
-      (item) => item.currentStatus === "maintenance"
-    ).length,
-  };
-
-  const groupSummaries = useMemo(() => {
-    const entries = new Map<string, ReturnType<typeof summarizeStatuses>>();
-
-    for (const group of data.groups) {
-      entries.set(group.id, summarizeStatuses(group.configs));
-    }
-
-    entries.set("ungrouped", summarizeStatuses(data.ungrouped));
-    return entries;
-  }, [data.groups, data.ungrouped]);
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups((current) => ({
@@ -233,7 +230,7 @@ export function DashboardView() {
         </div>
       </section>
 
-      {data.groups.map((group) =>
+      {groups.map((group) =>
         group.configs.length > 0 ? (
           <section
             key={group.id}
@@ -292,7 +289,7 @@ export function DashboardView() {
         ) : null
       )}
 
-      {data.ungrouped.length > 0 && (
+      {ungrouped.length > 0 && (
         <section className="rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_26px_70px_-40px_rgba(15,23,42,0.45)] backdrop-blur">
           <button
             type="button"
@@ -327,13 +324,13 @@ export function DashboardView() {
               </div>
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{data.ungrouped.length} 个配置</span>
+              <span>{ungrouped.length} 个配置</span>
               <span>{collapsedGroups.ungrouped ? "已收起" : "展开中"}</span>
             </div>
           </button>
           {!collapsedGroups.ungrouped && (
             <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {data.ungrouped.map((config) => (
+              {ungrouped.map((config) => (
                 <ProviderCard key={config.id} config={config} />
               ))}
             </div>
