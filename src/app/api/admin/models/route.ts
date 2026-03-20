@@ -2,8 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyAuth } from "@/lib/admin-auth";
 
+const API_PATH_SUFFIX_REGEX = /\/(chat\/completions|responses|models)\/?$/;
+
+function normalizeInputUrl(input: string): string {
+  const [pathWithoutQuery] = input.trim().split("?");
+  return pathWithoutQuery.replace(/\/+$/, "");
+}
+
+function deriveBaseUrl(input: string): string {
+  const normalized = normalizeInputUrl(input);
+  return normalized.replace(API_PATH_SUFFIX_REGEX, "");
+}
+
 function normalizeModelsUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  const trimmed = deriveBaseUrl(baseUrl);
   if (trimmed.endsWith("/models")) {
     return trimmed;
   }
