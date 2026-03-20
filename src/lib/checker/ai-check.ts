@@ -53,12 +53,50 @@ function normalizeMetadata(
 }
 
 /**
+ * 规范化模型输出，兼容全角数字和常见标点。
+ */
+function normalizeAnswerText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[０-９]/g, (char) =>
+      String.fromCharCode(char.charCodeAt(0) - 0xfee0)
+    )
+    .replace(/[`"'“”‘’]/g, "")
+    .replace(/\s+/g, "");
+}
+
+/**
  * 校验模型响应是否包含正确答案。
- * 提取响应中的所有数字字符，期望仅出现一个 "2"。
+ * 兼容 "2"、"答案是2"、"1+1=2" 等常见正确格式，
+ * 避免因格式差异把真实可用的接口误判成失败。
  */
 function isAnswerCorrect(text: string): boolean {
-  const digits = text.match(/\d/g) ?? [];
-  return digits.length === 1 && digits[0] === "2";
+  const normalized = normalizeAnswerText(text)
+    .replace(/^[=：:\-]+/, "")
+    .replace(/[。．.!?！？,，、；;:：]+$/g, "");
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized === "2" || normalized === "two") {
+    return true;
+  }
+
+  if (
+    /^(答案|结果|answer|result|theansweris|answeris|resultis|its|itis)?[:：=]?(2|two)$/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  if (/^1\+1=?2$/.test(normalized) || /^1加1(等于|是)?2$/.test(normalized)) {
+    return true;
+  }
+
+  return /answer[:：=]2/.test(normalized);
 }
 
 export async function checkModel(
@@ -117,7 +155,7 @@ export async function checkModel(
       model: isResponsesEndpoint(baseUrl)
         ? provider.responses(model)
         : provider.chat(model),
-      prompt: "请计算：1+1等于几？只回答数字。",
+      prompt: "请计算：1+1等于几？只输出最终答案 2，不要输出解释、算式或标点。",
       maxOutputTokens: 10,
       abortSignal: AbortSignal.timeout(TIMEOUT_MS),
     });

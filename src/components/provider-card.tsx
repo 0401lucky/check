@@ -51,7 +51,7 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
   return (
     <article
       className={cn(
-        "relative overflow-hidden rounded-[26px] border p-5 shadow-[0_22px_52px_-30px_rgba(15,23,42,0.45)] transition-all hover:-translate-y-1 hover:shadow-[0_26px_72px_-32px_rgba(15,23,42,0.45)]",
+        "relative overflow-hidden rounded-[24px] border p-4 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.4)] transition-all hover:-translate-y-1 hover:shadow-[0_24px_60px_-32px_rgba(15,23,42,0.42)]",
         statusToneMap[config.currentStatus] ?? statusToneMap.error
       )}
     >
@@ -72,8 +72,8 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
         <StatusBadge status={config.currentStatus} />
       </div>
 
-      <div className="mt-5 grid grid-cols-3 gap-3">
-        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3 text-center">
+      <div className="mt-4 grid grid-cols-3 gap-2.5">
+        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2.5 text-center">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             延迟
           </div>
@@ -81,7 +81,7 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
             {formatLatency(config.latency)}
           </div>
         </div>
-        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3 text-center">
+        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2.5 text-center">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             7天可用
           </div>
@@ -92,7 +92,7 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
             {formatSuccessStats(config.successCount7d, config.totalCount7d)}
           </div>
         </div>
-        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-3 text-center">
+        <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2.5 text-center">
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             30天可用
           </div>
@@ -105,13 +105,13 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
         </div>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-border/60 bg-background/60 px-3 py-3">
+      <div className="mt-4 rounded-2xl border border-border/60 bg-background/60 px-3 py-3">
         <StatusTimeline history={config.history} />
       </div>
 
       {config.currentMessage && (
         <div
-          className="mt-4 rounded-2xl border border-border/60 bg-background/65 px-3 py-3 text-xs text-muted-foreground"
+          className="mt-3.5 rounded-2xl border border-border/60 bg-background/65 px-3 py-3 text-xs text-muted-foreground"
           title={config.currentMessage}
         >
           <div className="mb-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -121,7 +121,7 @@ export function ProviderCard({ config }: { config: DashboardConfig }) {
         </div>
       )}
 
-      <div className="mt-4 flex items-center justify-between text-[11px] text-muted-foreground">
+      <div className="mt-3.5 flex items-center justify-between text-[11px] text-muted-foreground">
         <span>状态采样 60 条</span>
         最后检查: {formatTime(config.lastCheckedAt)}
       </div>

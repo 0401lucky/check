@@ -22,7 +22,7 @@ interface ConfigTableProps {
   configs: ConfigItem[];
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
-  onToggleSelectAll: () => void;
+  onToggleSelectAll: (ids: string[]) => void;
   onEdit: (config: ConfigItem) => void;
   onDelete: (id: string) => void;
   onToggle: (id: string, enabled: boolean) => void;
@@ -57,7 +57,7 @@ export function ConfigTable({
               <input
                 type="checkbox"
                 checked={allSelected}
-                onChange={onToggleSelectAll}
+                onChange={() => onToggleSelectAll(configs.map((config) => config.id))}
                 className="h-4 w-4 rounded border"
                 aria-label="全选当前列表"
               />

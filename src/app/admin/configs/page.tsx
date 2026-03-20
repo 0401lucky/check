@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ConfigForm } from "@/components/admin/config-form";
 import { ConfigTable } from "@/components/admin/config-table";
+import { ModalShell } from "@/components/admin/modal-shell";
 import {
   AlertCircle,
   ArrowLeft,
   Ban,
   CheckCheck,
+  FolderKanban,
   Plus,
   Search,
   ShieldCheck,
@@ -35,9 +37,20 @@ interface ConfigItem {
 interface GroupItem {
   id: string;
   name: string;
+  description: string | null;
+  sortOrder: number;
+  _count?: { configs: number };
 }
 
 type StatusFilter = "all" | "enabled" | "disabled" | "maintenance";
+type GroupFilter = "all" | "ungrouped" | string;
+
+interface ConfigSection {
+  key: string;
+  title: string;
+  description: string | null;
+  configs: ConfigItem[];
+}
 
 export default function ConfigsPage() {
   const router = useRouter();
@@ -51,6 +64,7 @@ export default function ConfigsPage() {
   const [opNotice, setOpNotice] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [groupFilter, setGroupFilter] = useState<GroupFilter>("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -92,6 +106,21 @@ export default function ConfigsPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (
+      groupFilter !== "all" &&
+      groupFilter !== "ungrouped" &&
+      !groups.some((group) => group.id === groupFilter)
+    ) {
+      setGroupFilter("all");
+    }
+  }, [groupFilter, groups]);
+
+  const closeForm = useCallback(() => {
+    setShowForm(false);
+    setEditing(null);
+  }, []);
+
   const handleSave = async (data: Record<string, unknown>) => {
     setOpError("");
     setOpNotice("");
@@ -116,8 +145,7 @@ export default function ConfigsPage() {
         return;
       }
 
-      setShowForm(false);
-      setEditing(null);
+      closeForm();
       const payload = await res.json().catch(() => null);
       if (!editing && typeof payload?.createdCount === "number") {
         setOpNotice(`已批量创建 ${payload.createdCount} 个模型配置`);
@@ -184,28 +212,125 @@ export default function ConfigsPage() {
     }
   };
 
-  const filteredConfigs = configs.filter((config) => {
-    const keyword = search.trim().toLowerCase();
-    const hitKeyword =
-      keyword.length === 0 ||
-      config.name.toLowerCase().includes(keyword) ||
-      config.model.toLowerCase().includes(keyword) ||
-      config.baseUrl.toLowerCase().includes(keyword) ||
-      (config.group?.name ?? "").toLowerCase().includes(keyword);
+  const scopedConfigs = useMemo(() => {
+    return configs.filter((config) => {
+      const keyword = search.trim().toLowerCase();
+      const hitKeyword =
+        keyword.length === 0 ||
+        config.name.toLowerCase().includes(keyword) ||
+        config.model.toLowerCase().includes(keyword) ||
+        config.baseUrl.toLowerCase().includes(keyword) ||
+        (config.group?.name ?? "").toLowerCase().includes(keyword);
 
-    if (!hitKeyword) return false;
+      if (!hitKeyword) return false;
 
-    switch (statusFilter) {
-      case "enabled":
-        return config.enabled && !config.isMaintenance;
-      case "disabled":
-        return !config.enabled;
-      case "maintenance":
-        return config.isMaintenance;
-      default:
-        return true;
+      switch (statusFilter) {
+        case "enabled":
+          return config.enabled && !config.isMaintenance;
+        case "disabled":
+          return !config.enabled;
+        case "maintenance":
+          return config.isMaintenance;
+        default:
+          return true;
+      }
+    });
+  }, [configs, search, statusFilter]);
+
+  const filteredConfigs = useMemo(() => {
+    return scopedConfigs.filter((config) =>
+      groupFilter === "all"
+        ? true
+        : groupFilter === "ungrouped"
+          ? !config.groupId
+          : config.groupId === groupFilter
+    );
+  }, [groupFilter, scopedConfigs]);
+
+  const groupChips = useMemo(() => {
+    const chips = groups.map((group) => ({
+      id: group.id,
+      label: group.name,
+      count: scopedConfigs.filter((config) => config.groupId === group.id).length,
+    }));
+
+    return [
+      { id: "all", label: "全部", count: scopedConfigs.length },
+      ...chips,
+      {
+        id: "ungrouped",
+        label: "未分组",
+        count: scopedConfigs.filter((config) => !config.groupId).length,
+      },
+    ];
+  }, [groups, scopedConfigs]);
+
+  const configSections = useMemo<ConfigSection[]>(() => {
+    if (filteredConfigs.length === 0) {
+      return [];
     }
-  });
+
+    const groupedConfigs = new Map<string, ConfigItem[]>();
+    groups.forEach((group) => groupedConfigs.set(group.id, []));
+
+    const ungroupedItems: ConfigItem[] = [];
+    for (const config of filteredConfigs) {
+      if (config.groupId && groupedConfigs.has(config.groupId)) {
+        groupedConfigs.get(config.groupId)?.push(config);
+      } else {
+        ungroupedItems.push(config);
+      }
+    }
+
+    if (groupFilter === "all") {
+      const sections = groups
+        .map((group) => ({
+          key: group.id,
+          title: group.name,
+          description: group.description,
+          configs: groupedConfigs.get(group.id) ?? [],
+        }))
+        .filter((section) => section.configs.length > 0);
+
+      if (ungroupedItems.length > 0) {
+        sections.push({
+          key: "ungrouped",
+          title: "未分组",
+          description: "尚未分配分组的配置",
+          configs: ungroupedItems,
+        });
+      }
+
+      return sections;
+    }
+
+    if (groupFilter === "ungrouped") {
+      return ungroupedItems.length > 0
+        ? [
+            {
+              key: "ungrouped",
+              title: "未分组",
+              description: "尚未分配分组的配置",
+              configs: ungroupedItems,
+            },
+          ]
+        : [];
+    }
+
+    const activeGroup = groups.find((group) => group.id === groupFilter);
+    if (!activeGroup) {
+      return [];
+    }
+
+    return [
+      {
+        key: activeGroup.id,
+        title: activeGroup.name,
+        description: activeGroup.description,
+        configs: groupedConfigs.get(activeGroup.id) ?? [],
+      },
+    ].filter((section) => section.configs.length > 0);
+  }, [filteredConfigs, groupFilter, groups]);
 
   const selectedCount = selectedIds.length;
   const selectedVisibleCount = filteredConfigs.filter((config) =>
@@ -231,19 +356,18 @@ export default function ConfigsPage() {
     );
   };
 
-  const toggleSelectAll = () => {
-    if (allVisibleSelected) {
-      setSelectedIds((current) =>
-        current.filter(
-          (id) => !filteredConfigs.some((config) => config.id === id)
-        )
-      );
+  const toggleSelectAll = (ids: string[]) => {
+    if (ids.length === 0) {
       return;
     }
 
-    setSelectedIds((current) =>
-      Array.from(new Set([...current, ...filteredConfigs.map((config) => config.id)]))
-    );
+    const everySelected = ids.every((id) => selectedIds.includes(id));
+    if (everySelected) {
+      setSelectedIds((current) => current.filter((id) => !ids.includes(id)));
+      return;
+    }
+
+    setSelectedIds((current) => Array.from(new Set([...current, ...ids])));
   };
 
   const runBulkAction = async (
@@ -295,12 +419,14 @@ export default function ConfigsPage() {
   };
 
   const handleBulkMaintenance = async (isMaintenance: boolean) => {
-    await runBulkAction(isMaintenance ? "批量开启维护模式" : "批量关闭维护模式", (id) =>
-      fetch("/api/admin/configs", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, isMaintenance }),
-      })
+    await runBulkAction(
+      isMaintenance ? "批量开启维护模式" : "批量关闭维护模式",
+      (id) =>
+        fetch("/api/admin/configs", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, isMaintenance }),
+        })
     );
   };
 
@@ -362,12 +488,12 @@ export default function ConfigsPage() {
         <div className="border-b border-border/60 px-6 py-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-center gap-3">
-          <Link
-            href="/admin"
+              <Link
+                href="/admin"
                 className="rounded-full border border-border/70 bg-background/80 p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">
                   Provider Control
@@ -376,7 +502,7 @@ export default function ConfigsPage() {
                   监控配置台
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  支持批量导入模型、批量操作配置，并快速诊断异常原因。
+                  支持批量导入模型、按分组查看已填配置，并快速诊断异常原因。
                 </p>
               </div>
             </div>
@@ -476,9 +602,7 @@ export default function ConfigsPage() {
         <section className="rounded-2xl border border-border/70 bg-card/95 p-4 shadow-[0_18px_48px_-30px_rgba(15,23,42,0.35)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-sm font-medium">
-                已选择 {selectedCount} 项
-              </div>
+              <div className="text-sm font-medium">已选择 {selectedCount} 项</div>
               <div className="text-xs text-muted-foreground">
                 当前筛选结果中命中 {selectedVisibleCount} 项
               </div>
@@ -529,31 +653,115 @@ export default function ConfigsPage() {
         </section>
       )}
 
-      {showForm && (
-        <ConfigForm
-          key={editing?.id ?? "new"}
-          config={editing}
-          groups={groups}
-          onSave={handleSave}
-          onCancel={() => {
-            setShowForm(false);
-            setEditing(null);
-          }}
-        />
+      <section className="rounded-[28px] border border-border/70 bg-card/90 p-5 shadow-[0_20px_58px_-34px_rgba(15,23,42,0.35)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/85 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              <FolderKanban className="h-3.5 w-3.5" />
+              Group View
+            </div>
+            <h2 className="mt-3 text-xl font-semibold tracking-tight">
+              按分组查看已填配置
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              可直接切换到某个分组，只看这一组下的模型配置。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleSelectAll(filteredConfigs.map((config) => config.id))}
+            disabled={filteredConfigs.length === 0}
+            className="rounded-full border border-border/70 bg-background/85 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {allVisibleSelected ? "取消全选当前筛选" : "全选当前筛选"}
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {groupChips.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setGroupFilter(chip.id)}
+              className={`rounded-full px-4 py-2 text-sm transition-colors ${
+                groupFilter === chip.id
+                  ? "bg-foreground text-background"
+                  : "border border-border/70 bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+            >
+              {chip.label} · {chip.count}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {configSections.length === 0 ? (
+        <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground shadow-sm">
+          当前筛选条件下没有配置
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {configSections.map((section) => (
+            <section
+              key={section.key}
+              className="rounded-[28px] border border-border/70 bg-card/95 p-4 shadow-[0_20px_58px_-34px_rgba(15,23,42,0.35)]"
+            >
+              <div className="mb-4 flex flex-col gap-2 border-b border-border/60 px-1 pb-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    Group
+                  </div>
+                  <h3 className="mt-1 text-xl font-semibold tracking-tight">
+                    {section.title}
+                  </h3>
+                  {section.description && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {section.description}
+                    </p>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {section.configs.length} 项配置
+                </div>
+              </div>
+
+              <ConfigTable
+                configs={section.configs}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+                onToggleSelectAll={toggleSelectAll}
+                onEdit={(config) => {
+                  setEditing(config);
+                  setShowForm(true);
+                }}
+                onDelete={handleDelete}
+                onToggle={handleToggle}
+              />
+            </section>
+          ))}
+        </div>
       )}
 
-      <ConfigTable
-        configs={filteredConfigs}
-        selectedIds={selectedIds}
-        onToggleSelect={toggleSelect}
-        onToggleSelectAll={toggleSelectAll}
-        onEdit={(c) => {
-          setEditing(c);
-          setShowForm(true);
-        }}
-        onDelete={handleDelete}
-        onToggle={handleToggle}
-      />
+      {showForm && (
+        <ModalShell
+          title={editing ? "编辑配置" : "新增配置"}
+          description={
+            editing
+              ? "修改后会保留当前记录，并在下一轮轮询中按新参数检测。"
+              : "支持单个创建，也支持先获取模型后批量导入。"
+          }
+          onClose={closeForm}
+          widthClassName="max-w-6xl"
+        >
+          <ConfigForm
+            key={editing?.id ?? "new"}
+            config={editing}
+            groups={groups}
+            onSave={handleSave}
+            onCancel={closeForm}
+          />
+        </ModalShell>
+      )}
     </div>
   );
 }

@@ -163,10 +163,10 @@ export async function POST(request: NextRequest) {
 
     const config = await db.checkConfig.create({
       data: {
-        name: String(name),
-        model: String(model),
-        baseUrl: String(baseUrl),
-        apiKey: String(apiKey),
+        name: String(name).trim(),
+        model: String(model).trim(),
+        baseUrl: String(baseUrl).trim(),
+        apiKey: String(apiKey).trim(),
         metadata: toCreateMetadata(metadata),
         requestHeaders: toCreateRequestHeaders(requestHeaders),
         groupId: groupId ? String(groupId) : null,
@@ -214,10 +214,10 @@ export async function PUT(request: NextRequest) {
 
     // 白名单字段
     const data: Record<string, unknown> = {};
-    if (name !== undefined) data.name = String(name);
-    if (model !== undefined) data.model = String(model);
-    if (baseUrl !== undefined) data.baseUrl = String(baseUrl);
-    if (apiKey) data.apiKey = String(apiKey);
+    if (name !== undefined) data.name = String(name).trim();
+    if (model !== undefined) data.model = String(model).trim();
+    if (baseUrl !== undefined) data.baseUrl = String(baseUrl).trim();
+    if (apiKey) data.apiKey = String(apiKey).trim();
     if (metadata !== undefined) {
       data.metadata = toUpdateMetadata(metadata);
     }
