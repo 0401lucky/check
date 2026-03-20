@@ -1,9 +1,11 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { ProviderCard } from "./provider-card";
 import {
   AlertCircle,
+  ChevronDown,
   Clock3,
   Loader2,
   ShieldAlert,
@@ -16,8 +18,56 @@ function formatLastUpdated(iso: string): string {
   return new Date(iso).toLocaleString("zh-CN");
 }
 
+function summarizeStatuses(
+  configs: Array<{ currentStatus: string }>
+): Array<{ key: string; label: string; count: number; className: string }> {
+  const counts = {
+    operational: 0,
+    degraded: 0,
+    failed: 0,
+    maintenance: 0,
+    error: 0,
+  };
+
+  for (const config of configs) {
+    if (config.currentStatus in counts) {
+      counts[config.currentStatus as keyof typeof counts] += 1;
+    }
+  }
+
+  return [
+    {
+      key: "operational",
+      label: "正常",
+      count: counts.operational,
+      className: "bg-status-operational/12 text-status-operational",
+    },
+    {
+      key: "degraded",
+      label: "缓慢",
+      count: counts.degraded,
+      className: "bg-status-degraded/12 text-status-degraded",
+    },
+    {
+      key: "maintenance",
+      label: "维护",
+      count: counts.maintenance,
+      className: "bg-status-degraded/12 text-status-degraded",
+    },
+    {
+      key: "failed",
+      label: "故障",
+      count: counts.failed + counts.error,
+      className: "bg-status-failed/12 text-status-failed",
+    },
+  ].filter((item) => item.count > 0);
+}
+
 export function DashboardView() {
   const { data, isLoading, error } = useDashboard();
+  const [collapsedGroups, setCollapsedGroups] = useState<
+    Record<string, boolean>
+  >({});
 
   if (isLoading) {
     return (
@@ -58,6 +108,24 @@ export function DashboardView() {
     maintenance: allConfigs.filter(
       (item) => item.currentStatus === "maintenance"
     ).length,
+  };
+
+  const groupSummaries = useMemo(() => {
+    const entries = new Map<string, ReturnType<typeof summarizeStatuses>>();
+
+    for (const group of data.groups) {
+      entries.set(group.id, summarizeStatuses(group.configs));
+    }
+
+    entries.set("ungrouped", summarizeStatuses(data.ungrouped));
+    return entries;
+  }, [data.groups, data.ungrouped]);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
   };
 
   if (!hasConfigs) {
@@ -171,53 +239,105 @@ export function DashboardView() {
             key={group.id}
             className="rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_26px_70px_-40px_rgba(15,23,42,0.45)] backdrop-blur"
           >
-            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                  Group
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.id)}
+              className="flex w-full flex-col gap-3 text-left sm:flex-row sm:items-end sm:justify-between"
+            >
+              <div className="flex items-start gap-4">
+                <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl border border-border/70 bg-background/75">
+                  <ChevronDown
+                    className={`h-5 w-5 transition-transform ${
+                      collapsedGroups[group.id] ? "-rotate-90" : "rotate-0"
+                    }`}
+                  />
                 </div>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-                  {group.name}
-                </h2>
-              {group.description && (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                  {group.description}
-                </p>
-              )}
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    Group
+                  </div>
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+                    {group.name}
+                  </h2>
+                  {group.description && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {group.description}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(groupSummaries.get(group.id) ?? []).map((item) => (
+                      <span
+                        key={item.key}
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.className}`}
+                      >
+                        {item.label} {item.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="text-sm text-muted-foreground">
-                {group.configs.length} 个配置
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span>{group.configs.length} 个配置</span>
+                <span>{collapsedGroups[group.id] ? "已收起" : "展开中"}</span>
               </div>
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {group.configs.map((config) => (
-                <ProviderCard key={config.id} config={config} />
-              ))}
-            </div>
+            </button>
+            {!collapsedGroups[group.id] && (
+              <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                {group.configs.map((config) => (
+                  <ProviderCard key={config.id} config={config} />
+                ))}
+              </div>
+            )}
           </section>
         ) : null
       )}
 
       {data.ungrouped.length > 0 && (
         <section className="rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_26px_70px_-40px_rgba(15,23,42,0.45)] backdrop-blur">
-          {data.groups.length > 0 && (
-            <div className="mb-5 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => toggleGroup("ungrouped")}
+            className="flex w-full items-start justify-between gap-4 text-left"
+          >
+            <div className="flex items-start gap-4">
+              <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl border border-border/70 bg-background/75">
+                <ChevronDown
+                  className={`h-5 w-5 transition-transform ${
+                    collapsedGroups.ungrouped ? "-rotate-90" : "rotate-0"
+                  }`}
+                />
+              </div>
               <div>
                 <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                   Group
                 </div>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight">其他</h2>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {data.ungrouped.length} 个配置
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+                  其他
+                </h2>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(groupSummaries.get("ungrouped") ?? []).map((item) => (
+                    <span
+                      key={item.key}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.className}`}
+                    >
+                      {item.label} {item.count}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span>{data.ungrouped.length} 个配置</span>
+              <span>{collapsedGroups.ungrouped ? "已收起" : "展开中"}</span>
+            </div>
+          </button>
+          {!collapsedGroups.ungrouped && (
+            <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {data.ungrouped.map((config) => (
+                <ProviderCard key={config.id} config={config} />
+              ))}
+            </div>
           )}
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {data.ungrouped.map((config) => (
-              <ProviderCard key={config.id} config={config} />
-            ))}
-          </div>
         </section>
       )}
 
