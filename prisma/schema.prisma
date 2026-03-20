@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model CheckConfig {
+  id        String   @id @default(cuid())
+  name      String
+  model     String
+  baseUrl   String   @map("base_url")
+  apiKey    String   @map("api_key")
+  groupId   String?  @map("group_id")
+  group     Group?   @relation(fields: [groupId], references: [id])
+  enabled   Boolean  @default(true)
+  enabledAt DateTime @default(now()) @map("enabled_at")
+  sortOrder Int      @default(0) @map("sort_order")
+  history   CheckHistory[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("check_configs")
+}
+
+model CheckHistory {
+  id           String      @id @default(cuid())
+  configId     String      @map("config_id")
+  config       CheckConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  status       String
+  latency      Int?
+  errorMessage String?     @map("error_message")
+  checkedAt    DateTime    @default(now()) @map("checked_at")
+
+  @@index([configId, checkedAt])
+  @@index([checkedAt])
+  @@map("check_history")
+}
+
+model Group {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  sortOrder   Int           @default(0) @map("sort_order")
+  configs     CheckConfig[]
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@map("groups")
+}
+
+model PollerLock {
+  id         String   @id
+  instanceId String   @map("instance_id")
+  lockedAt   DateTime @map("locked_at")
+
+  @@map("poller_lock")
+}
+
+model AdminSession {
+  id             String    @id
+  epoch          Int       @default(0)
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  windowStart    DateTime? @map("window_start")
+
+  @@map("admin_session")
+}
