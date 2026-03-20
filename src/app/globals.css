@@ -89,5 +89,30 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    "Avenir Next", "Segoe UI Variable", "Segoe UI", "PingFang SC",
+    "Noto Sans SC", sans-serif;
+  background-image:
+    radial-gradient(circle at top left, oklch(0.98 0.02 84) 0, transparent 32%),
+    radial-gradient(circle at 85% 10%, oklch(0.95 0.04 210 / 0.7) 0, transparent 26%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 247, 250, 0.96)),
+    linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    auto,
+    26px 26px,
+    26px 26px;
+  background-position:
+    center,
+    center,
+    center,
+    center,
+    center;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--primary) 18%, white);
+  color: var(--foreground);
 }

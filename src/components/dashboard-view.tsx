@@ -2,7 +2,19 @@
 
 import { useDashboard } from "@/hooks/use-dashboard";
 import { ProviderCard } from "./provider-card";
-import { Loader2, AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  Clock3,
+  Loader2,
+  ShieldAlert,
+  Siren,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
+
+function formatLastUpdated(iso: string): string {
+  return new Date(iso).toLocaleString("zh-CN");
+}
 
 export function DashboardView() {
   const { data, isLoading, error } = useDashboard();
@@ -29,6 +41,25 @@ export function DashboardView() {
     data.groups.some((g) => g.configs.length > 0) ||
     data.ungrouped.length > 0;
 
+  const allConfigs = [
+    ...data.groups.flatMap((group) => group.configs),
+    ...data.ungrouped,
+  ];
+
+  const summary = {
+    total: allConfigs.length,
+    operational: allConfigs.filter((item) => item.currentStatus === "operational")
+      .length,
+    degraded: allConfigs.filter((item) => item.currentStatus === "degraded").length,
+    failed: allConfigs.filter(
+      (item) =>
+        item.currentStatus === "failed" || item.currentStatus === "error"
+    ).length,
+    maintenance: allConfigs.filter(
+      (item) => item.currentStatus === "maintenance"
+    ).length,
+  };
+
   if (!hasConfigs) {
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -40,18 +71,125 @@ export function DashboardView() {
 
   return (
     <div className="space-y-8">
+      <section className="overflow-hidden rounded-[32px] border border-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.86),rgba(250,250,249,0.96)),radial-gradient(circle_at_top_left,rgba(255,245,214,0.8),transparent_35%),radial-gradient(circle_at_90%_10%,rgba(219,234,254,0.8),transparent_28%)] p-6 shadow-[0_35px_90px_-42px_rgba(15,23,42,0.55)] sm:p-8">
+        <div className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5" />
+              Live Provider Board
+            </div>
+            <h1 className="mt-4 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
+              把 AI 供应商状态压缩成一眼就能判断的实时状态墙
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+              自动轮询可用性、延迟、维护状态和最近错误原因。
+              出问题时不用翻日志，首页就能直接看到异常分布。
+            </p>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-border/70 bg-background/85 p-4">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  总配置
+                </div>
+                <div className="mt-2 text-3xl font-semibold">{summary.total}</div>
+              </div>
+              <div className="rounded-2xl border border-status-operational/25 bg-status-operational/10 p-4">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-status-operational/80">
+                  <Sparkles className="h-4 w-4" />
+                  正常
+                </div>
+                <div className="mt-2 text-3xl font-semibold text-status-operational">
+                  {summary.operational}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-status-degraded/25 bg-status-degraded/10 p-4">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-status-degraded/80">
+                  <Clock3 className="h-4 w-4" />
+                  缓慢 / 维护
+                </div>
+                <div className="mt-2 text-3xl font-semibold text-status-degraded">
+                  {summary.degraded + summary.maintenance}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-status-failed/25 bg-status-failed/10 p-4">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-status-failed/80">
+                  <Siren className="h-4 w-4" />
+                  故障 / 异常
+                </div>
+                <div className="mt-2 text-3xl font-semibold text-status-failed">
+                  {summary.failed}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="rounded-[28px] border border-border/70 bg-background/82 p-5 shadow-sm">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                最后更新
+              </div>
+              <div className="mt-3 text-lg font-semibold">
+                {formatLastUpdated(data.lastUpdated)}
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                页面每 30 秒自动刷新一次
+              </div>
+            </div>
+            <div className="rounded-[28px] border border-status-degraded/25 bg-status-degraded/8 p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-status-degraded/80">
+                <Wrench className="h-4 w-4" />
+                维护模式
+              </div>
+              <div className="mt-3 text-lg font-semibold text-status-degraded">
+                {summary.maintenance} 个配置正在维护
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                维护中的配置会保留卡片，但暂停轮询
+              </div>
+            </div>
+            <div className="rounded-[28px] border border-border/70 bg-background/82 p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                <ShieldAlert className="h-4 w-4" />
+                故障关注
+              </div>
+              <div className="mt-3 text-lg font-semibold">
+                {summary.failed > 0
+                  ? `当前有 ${summary.failed} 项需要处理`
+                  : "当前没有阻断性故障"}
+              </div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                卡片里会直接展示最近错误原因
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {data.groups.map((group) =>
         group.configs.length > 0 ? (
-          <section key={group.id}>
-            <div className="mb-4">
-              <h2 className="text-xl font-bold">{group.name}</h2>
+          <section
+            key={group.id}
+            className="rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_26px_70px_-40px_rgba(15,23,42,0.45)] backdrop-blur"
+          >
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Group
+                </div>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+                  {group.name}
+                </h2>
               {group.description && (
-                <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm text-muted-foreground">
                   {group.description}
                 </p>
               )}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {group.configs.length} 个配置
+              </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {group.configs.map((config) => (
                 <ProviderCard key={config.id} config={config} />
               ))}
@@ -61,11 +199,21 @@ export function DashboardView() {
       )}
 
       {data.ungrouped.length > 0 && (
-        <section>
+        <section className="rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_26px_70px_-40px_rgba(15,23,42,0.45)] backdrop-blur">
           {data.groups.length > 0 && (
-            <h2 className="mb-4 text-xl font-bold">其他</h2>
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  Group
+                </div>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight">其他</h2>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {data.ungrouped.length} 个配置
+              </div>
+            </div>
           )}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {data.ungrouped.map((config) => (
               <ProviderCard key={config.id} config={config} />
             ))}
@@ -73,9 +221,8 @@ export function DashboardView() {
         </section>
       )}
 
-      <div className="text-center text-xs text-muted-foreground">
-        最后更新: {new Date(data.lastUpdated).toLocaleString("zh-CN")}
-        <span className="ml-2">（每 30 秒自动刷新）</span>
+      <div className="text-center text-xs uppercase tracking-[0.18em] text-muted-foreground">
+        Last Updated {formatLastUpdated(data.lastUpdated)} · Auto Refresh Every 30 Seconds
       </div>
     </div>
   );
