@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build && node scripts/patch-standalone-prisma.mjs",
     "start": "prisma migrate deploy && node .next/standalone/server.js",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
