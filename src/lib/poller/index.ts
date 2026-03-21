@@ -5,8 +5,11 @@ import { checkModel } from "@/lib/checker";
 let pollerTimer: ReturnType<typeof setInterval> | null = null;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let lockRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
+let isAcquiringLock = false;
 let lockLost = false; // 心跳失败时置 true，通知 runChecks 尽早终止
+let shutdownHooksBound = false;
 
 const INSTANCE_ID = crypto.randomUUID();
 
@@ -32,6 +35,8 @@ const RETENTION_DAYS = clampEnv(
   365
 );
 const HEARTBEAT_INTERVAL = Math.max(Math.floor(POLL_INTERVAL / 2), 5_000);
+const LOCK_RETRY_INTERVAL =
+  clampEnv(process.env.CHECK_LOCK_RETRY_INTERVAL, 15, 5, 300) * 1000;
 
 // ── 数据库分布式锁 ──
 
@@ -101,6 +106,39 @@ async function releaseLock(): Promise<void> {
   }
 }
 
+function clearLockRetryTimer() {
+  if (!lockRetryTimer) return;
+  clearTimeout(lockRetryTimer);
+  lockRetryTimer = null;
+}
+
+function scheduleLockRetry(reason: string) {
+  if (process.env.ENABLE_POLLER === "false") return;
+  if (pollerTimer || lockRetryTimer || isAcquiringLock) return;
+
+  console.log(
+    `[轮询器] ${reason}，${LOCK_RETRY_INTERVAL / 1000}s 后重试获取锁`
+  );
+
+  lockRetryTimer = setTimeout(() => {
+    lockRetryTimer = null;
+    void attemptStartPoller();
+  }, LOCK_RETRY_INTERVAL);
+}
+
+function bindShutdownHooks() {
+  if (shutdownHooksBound) return;
+  shutdownHooksBound = true;
+
+  const gracefulShutdown = async () => {
+    await stopPoller();
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", gracefulShutdown);
+  process.on("SIGINT", gracefulShutdown);
+}
+
 // ── 锁心跳（独立于 runChecks，保证慢轮次不会被误判过期） ──
 
 function startHeartbeat() {
@@ -108,9 +146,9 @@ function startHeartbeat() {
   heartbeatTimer = setInterval(async () => {
     const ok = await refreshLock();
     if (!ok) {
-      console.warn("[轮询器] 心跳续租失败，锁已被其他实例接管");
-      lockLost = true;
-      await stopPoller();
+      await handleLockLost(
+        "[轮询器] 心跳续租失败，锁已被其他实例接管或数据库暂不可用"
+      );
     }
   }, HEARTBEAT_INTERVAL);
 }
@@ -120,7 +158,7 @@ async function handleLockLost(message: string) {
 
   lockLost = true;
   console.warn(message);
-  await stopPoller();
+  await stopPoller({ retry: true, reason: "锁已丢失，切换为待命重试" });
 }
 
 // ── 检查逻辑 ──
@@ -240,42 +278,61 @@ async function cleanupHistory() {
 
 // ── 生命周期 ──
 
-export async function startPoller() {
-  if (pollerTimer) return;
-
+async function attemptStartPoller() {
+  if (pollerTimer || isAcquiringLock) return;
   if (process.env.ENABLE_POLLER === "false") {
+    clearLockRetryTimer();
     console.log("[轮询器] 已通过 ENABLE_POLLER=false 禁用");
     return;
   }
 
-  const acquired = await tryAcquireLock();
-  if (!acquired) {
-    console.log("[轮询器] 无法获取锁，其他实例已在运行");
-    return;
+  let shouldRetry = false;
+  isAcquiringLock = true;
+
+  try {
+    const acquired = await tryAcquireLock();
+    if (!acquired) {
+      shouldRetry = true;
+      return;
+    }
+
+    clearLockRetryTimer();
+    lockLost = false;
+
+    console.log(
+      `[轮询器] 启动 (实例: ${INSTANCE_ID.slice(0, 8)})，间隔 ${POLL_INTERVAL / 1000}s，并发 ${CONCURRENCY}，保留 ${RETENTION_DAYS} 天`
+    );
+
+    // 独立心跳线程，保证慢轮次期间锁不过期
+    startHeartbeat();
+
+    void runChecks();
+    pollerTimer = setInterval(() => {
+      void runChecks();
+    }, POLL_INTERVAL);
+    cleanupTimer = setInterval(() => {
+      void cleanupHistory();
+    }, 24 * 60 * 60 * 1000);
+  } finally {
+    isAcquiringLock = false;
+
+    if (shouldRetry) {
+      scheduleLockRetry("当前未获取到轮询锁，其他实例可能仍在运行");
+    }
   }
-
-  lockLost = false;
-
-  console.log(
-    `[轮询器] 启动 (实例: ${INSTANCE_ID.slice(0, 8)})，间隔 ${POLL_INTERVAL / 1000}s，并发 ${CONCURRENCY}，保留 ${RETENTION_DAYS} 天`
-  );
-
-  const gracefulShutdown = async () => {
-    await stopPoller();
-    process.exit(0);
-  };
-  process.on("SIGTERM", gracefulShutdown);
-  process.on("SIGINT", gracefulShutdown);
-
-  // 独立心跳线程，保证慢轮次期间锁不过期
-  startHeartbeat();
-
-  runChecks();
-  pollerTimer = setInterval(runChecks, POLL_INTERVAL);
-  cleanupTimer = setInterval(cleanupHistory, 24 * 60 * 60 * 1000);
 }
 
-export async function stopPoller() {
+export async function startPoller() {
+  bindShutdownHooks();
+  await attemptStartPoller();
+}
+
+export async function stopPoller(options?: {
+  retry?: boolean;
+  reason?: string;
+}) {
+  const shouldRetry = options?.retry ?? false;
+
   if (pollerTimer) {
     clearInterval(pollerTimer);
     pollerTimer = null;
@@ -289,6 +346,17 @@ export async function stopPoller() {
     heartbeatTimer = null;
   }
 
+  if (!shouldRetry) {
+    clearLockRetryTimer();
+  }
+
   await releaseLock();
+
+  if (shouldRetry) {
+    console.log("[轮询器] 已停止当前轮询并释放锁，进入待命重试");
+    scheduleLockRetry(options?.reason ?? "轮询器已停止");
+    return;
+  }
+
   console.log("[轮询器] 已停止并释放锁");
 }
